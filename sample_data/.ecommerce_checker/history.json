@@ -1,0 +1,112 @@
+[
+  {
+    "timestamp": "2026-06-15T12:26:04.132175",
+    "total_files": 1,
+    "total_products": 10,
+    "stores": [
+      "专营店",
+      "旗舰店"
+    ],
+    "categories": [
+      "家居用品",
+      "数码配件",
+      "服装",
+      "箱包配饰",
+      "鞋靴"
+    ],
+    "total_issues": 29,
+    "critical_count": 6,
+    "warning_count": 19,
+    "info_count": 4,
+    "passed_count": 1,
+    "failed_count": 9
+  },
+  {
+    "timestamp": "2026-06-15T12:27:20.899960",
+    "total_files": 1,
+    "total_products": 10,
+    "stores": [
+      "专营店",
+      "旗舰店"
+    ],
+    "categories": [
+      "家居用品",
+      "数码配件",
+      "服装",
+      "箱包配饰",
+      "鞋靴"
+    ],
+    "total_issues": 25,
+    "critical_count": 7,
+    "warning_count": 14,
+    "info_count": 4,
+    "passed_count": 1,
+    "failed_count": 9
+  },
+  {
+    "timestamp": "2026-06-15T12:27:33.562841",
+    "total_files": 1,
+    "total_products": 10,
+    "stores": [
+      "专营店",
+      "旗舰店"
+    ],
+    "categories": [
+      "家居用品",
+      "数码配件",
+      "服装",
+      "箱包配饰",
+      "鞋靴"
+    ],
+    "total_issues": 25,
+    "critical_count": 7,
+    "warning_count": 14,
+    "info_count": 4,
+    "passed_count": 1,
+    "failed_count": 9
+  },
+  {
+    "timestamp": "2026-06-15T12:28:29.406430",
+    "total_files": 1,
+    "total_products": 10,
+    "stores": [
+      "专营店",
+      "旗舰店"
+    ],
+    "categories": [
+      "家居用品",
+      "数码配件",
+      "服装",
+      "箱包配饰",
+      "鞋靴"
+    ],
+    "total_issues": 25,
+    "critical_count": 7,
+    "warning_count": 14,
+    "info_count": 4,
+    "passed_count": 1,
+    "failed_count": 9
+  },
+  {
+    "timestamp": "2026-06-15T12:30:26.364081",
+    "total_files": 1,
+    "total_products": 10,
+    "stores": [
+      "专营店",
+      "旗舰店"
+    ],
+    "categories": [
+      "家居用品",
+      "数码配件",
+      "服装",
+      "箱包配饰",
+      "鞋靴"
+    ],
+    "total_issues": 25,
+    "critical_count": 7,
+    "warning_count": 14,
+    "info_count": 4,
+    "passed_count": 1,
+    "failed_count": 9
+  }
+]

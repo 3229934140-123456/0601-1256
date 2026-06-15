@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-06-15T12:13:33.831892",
+  "timestamp": "2026-06-15T12:27:33.556810",
   "total_files": 1,
-  "total_products": 7,
+  "total_products": 10,
   "stores": [
     "专营店",
     "旗舰店"
@@ -13,10 +13,10 @@
     "箱包配饰",
     "鞋靴"
   ],
-  "total_issues": 16,
-  "critical_count": 6,
-  "warning_count": 7,
-  "info_count": 3,
-  "passed_count": 2,
-  "failed_count": 5
+  "total_issues": 25,
+  "critical_count": 7,
+  "warning_count": 14,
+  "info_count": 4,
+  "passed_count": 1,
+  "failed_count": 9
 }

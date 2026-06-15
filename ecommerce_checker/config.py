@@ -37,3 +37,8 @@ ERROR_LEVELS: Dict[str, str] = {
 }
 
 IMAGE_EXTENSIONS: List[str] = [".jpg", ".jpeg", ".png", ".webp"]
+
+IMAGE_MIN_WIDTH: int = 800
+IMAGE_MIN_HEIGHT: int = 800
+IMAGE_MAX_SIZE_MB: float = 5.0
+DETAIL_IMAGES_MIN_COUNT: int = 3

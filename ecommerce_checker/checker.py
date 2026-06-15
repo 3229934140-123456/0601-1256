@@ -1,21 +1,25 @@
 from __future__ import annotations
 
+import os
 from typing import Dict, List, Optional, Set
 
-from .config import (
-    CATEGORY_RULES,
-    PRICE_MAX,
-    PRICE_MIN,
-    SENSITIVE_WORDS,
-    TITLE_MAX_LENGTH,
-)
+from .config import CATEGORY_RULES
+from .config_loader import CheckerConfig
 from .models import CheckIssue, CheckResult, Product
 from .utils import validate_sku
 
+try:
+    from PIL import Image as PILImage
+    _PIL_AVAILABLE = True
+except ImportError:
+    _PIL_AVAILABLE = False
+
 
 class ProductChecker:
-    def __init__(self, products: List[Product]):
+    def __init__(self, products: List[Product], base_dir: str = "", config: Optional[CheckerConfig] = None):
         self.products = products
+        self.base_dir = base_dir
+        self.config = config
         self._sku_set: Set[str] = set()
         self._sku_counts: Dict[str, int] = {}
         self._init_sku_tracking()
@@ -83,6 +87,9 @@ class ProductChecker:
         issues = []
         title = product.title
 
+        title_max_length = self.config.get("title_max_length", product.shop) if self.config else 60
+        sensitive_words = self.config.get("sensitive_words", product.shop) if self.config else []
+
         if not title:
             issues.append(
                 CheckIssue(
@@ -96,21 +103,21 @@ class ProductChecker:
             )
             return issues
 
-        if len(title) > TITLE_MAX_LENGTH:
+        if len(title) > title_max_length:
             issues.append(
                 CheckIssue(
                     sku=product.sku,
                     field="title",
                     issue_type="title_too_long",
-                    message=f"标题长度为 {len(title)} 字符，超过最大限制 {TITLE_MAX_LENGTH} 字符",
+                    message=f"标题长度为 {len(title)} 字符，超过最大限制 {title_max_length} 字符",
                     level="warning",
-                    suggestion=f"请精简标题至 {TITLE_MAX_LENGTH} 字符以内",
+                    suggestion=f"请精简标题至 {title_max_length} 字符以内",
                     auto_fixable=True,
-                    fixed_value=title[:TITLE_MAX_LENGTH],
+                    fixed_value=title[:title_max_length],
                 )
             )
 
-        found_sensitive = [word for word in SENSITIVE_WORDS if word in title]
+        found_sensitive = [word for word in sensitive_words if word in title]
         if found_sensitive:
             issues.append(
                 CheckIssue(
@@ -121,21 +128,24 @@ class ProductChecker:
                     level="warning",
                     suggestion="请删除或替换敏感词",
                     auto_fixable=True,
-                    fixed_value=self._remove_sensitive_words(title),
+                    fixed_value=self._remove_sensitive_words(title, sensitive_words),
                 )
             )
 
         return issues
 
-    def _remove_sensitive_words(self, title: str) -> str:
+    def _remove_sensitive_words(self, title: str, sensitive_words: List[str]) -> str:
         result = title
-        for word in SENSITIVE_WORDS:
+        for word in sensitive_words:
             result = result.replace(word, "")
         return result
 
     def _check_price(self, product: Product) -> List[CheckIssue]:
         issues = []
         price = product.price
+
+        price_min = self.config.get("price_min", product.shop) if self.config else 0.1
+        price_max = self.config.get("price_max", product.shop) if self.config else 999999
 
         if price is None:
             issues.append(
@@ -150,15 +160,15 @@ class ProductChecker:
             )
             return issues
 
-        if price < PRICE_MIN or price > PRICE_MAX:
+        if price < price_min or price > price_max:
             issues.append(
                 CheckIssue(
                     sku=product.sku,
                     field="price",
                     issue_type="price_out_of_range",
-                    message=f"价格 {price} 超出合理区间 [{PRICE_MIN}, {PRICE_MAX}]",
+                    message=f"价格 {price} 超出合理区间 [{price_min}, {price_max}]",
                     level="warning",
-                    suggestion=f"请确认价格是否在 {PRICE_MIN} - {PRICE_MAX} 范围内",
+                    suggestion=f"请确认价格是否在 {price_min} - {price_max} 范围内",
                 )
             )
 
@@ -209,6 +219,12 @@ class ProductChecker:
 
     def _check_images(self, product: Product) -> List[CheckIssue]:
         issues = []
+        shop = product.shop
+
+        detail_images_min_count = self.config.get("detail_images_min_count", shop) if self.config else 3
+        image_min_width = self.config.get("image_min_width", shop) if self.config else 800
+        image_min_height = self.config.get("image_min_height", shop) if self.config else 800
+        image_max_size_mb = self.config.get("image_max_size_mb", shop) if self.config else 5.0
 
         if not product.main_image:
             issues.append(
@@ -221,6 +237,8 @@ class ProductChecker:
                     suggestion=f"请在 images 目录下添加 {product.sku}_main.jpg 或 {product.sku}.jpg 作为主图",
                 )
             )
+        else:
+            issues.extend(self._check_single_image(product.main_image, "主图", image_min_width, image_min_height, image_max_size_mb))
 
         if not product.detail_images:
             issues.append(
@@ -233,17 +251,103 @@ class ProductChecker:
                     suggestion=f"请在 images 目录下添加 {product.sku}_detail_1.jpg, {product.sku}_detail_2.jpg 等详情图",
                 )
             )
-        elif len(product.detail_images) < 3:
+        else:
+            for idx, img_path in enumerate(product.detail_images):
+                issues.extend(self._check_single_image(img_path, f"详情图{idx+1}", image_min_width, image_min_height, image_max_size_mb))
+
+            if len(product.detail_images) < detail_images_min_count:
+                issues.append(
+                    CheckIssue(
+                        sku=product.sku,
+                        field="detail_images",
+                        issue_type="insufficient_detail_images",
+                        message=f"详情图数量不足，当前 {len(product.detail_images)} 张，建议至少 {detail_images_min_count} 张",
+                        level="info",
+                        suggestion="请补充更多详情图以展示商品细节",
+                    )
+                )
+
+        return issues
+
+    def _is_url(self, path: str) -> bool:
+        return path.startswith("http://") or path.startswith("https://")
+
+    def _check_single_image(self, image_path: str, image_label: str, min_width: int, min_height: int, max_size_mb: float) -> List[CheckIssue]:
+        issues = []
+
+        if self._is_url(image_path):
+            return issues
+
+        resolved_path = image_path
+        if self.base_dir and not os.path.isabs(resolved_path):
+            resolved_path = os.path.join(self.base_dir, resolved_path)
+            resolved_path = os.path.normpath(resolved_path)
+
+        if not os.path.isfile(resolved_path):
             issues.append(
                 CheckIssue(
-                    sku=product.sku,
-                    field="detail_images",
-                    issue_type="insufficient_detail_images",
-                    message=f"详情图数量不足，当前 {len(product.detail_images)} 张，建议至少3张",
-                    level="info",
-                    suggestion="请补充更多详情图以展示商品细节",
+                    sku="",
+                    field=image_label,
+                    issue_type="image_not_found",
+                    message=f"{image_label}文件不存在: {image_path}",
+                    level="warning",
+                    suggestion="请检查图片路径是否正确，确保图片文件存在",
                 )
             )
+            return issues
+
+        try:
+            file_size = os.path.getsize(resolved_path)
+            file_size_mb = file_size / (1024 * 1024)
+            if file_size_mb > max_size_mb:
+                issues.append(
+                    CheckIssue(
+                        sku="",
+                        field=image_label,
+                        issue_type="image_too_large",
+                        message=f"{image_label}文件过大: {file_size_mb:.2f}MB，超过限制 {max_size_mb}MB",
+                        level="warning",
+                        suggestion="请压缩图片大小以提高页面加载速度",
+                    )
+                )
+        except Exception:
+            pass
+
+        if not _PIL_AVAILABLE:
+            return issues
+
+        try:
+            with PILImage.open(resolved_path) as img:
+                img.verify()
+        except Exception as e:
+            issues.append(
+                CheckIssue(
+                    sku="",
+                    field=image_label,
+                    issue_type="image_corrupted",
+                    message=f"{image_label}文件损坏无法打开: {str(e)}",
+                    level="critical",
+                    suggestion="请重新上传或修复该图片",
+                )
+            )
+            return issues
+
+        try:
+            with PILImage.open(resolved_path) as img:
+                width, height = img.size
+                if width < min_width or height < min_height:
+                    issues.append(
+                        CheckIssue(
+                            sku="",
+                            field=image_label,
+                            issue_type="image_too_small",
+                            message=f"{image_label}尺寸过小: {width}x{height}，建议不小于 {min_width}x{min_height}",
+                            level="warning",
+                            suggestion="请使用更高分辨率的图片以保证展示效果",
+                        )
+                    )
+        except Exception:
+            pass
 
         return issues
 
@@ -252,8 +356,10 @@ class ProductChecker:
         category = product.category
         title = product.title
 
+        category_rules = self.config.get("category_rules", product.shop) if self.config else CATEGORY_RULES
+
         if not category:
-            suggested_category = self._suggest_category(title)
+            suggested_category = self._suggest_category(title, category_rules)
             issues.append(
                 CheckIssue(
                     sku=product.sku,
@@ -269,11 +375,11 @@ class ProductChecker:
 
         return issues
 
-    def _suggest_category(self, title: str) -> Optional[str]:
+    def _suggest_category(self, title: str, category_rules: Dict[str, List[str]]) -> Optional[str]:
         if not title:
             return None
 
-        for category, keywords in CATEGORY_RULES.items():
+        for category, keywords in category_rules.items():
             for keyword in keywords:
                 if keyword in title:
                     return category

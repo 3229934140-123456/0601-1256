@@ -10,10 +10,18 @@ from rich.table import Table
 
 from .checker import ProductChecker
 from .config import ERROR_LEVELS
+from .config_loader import load_config
 from .fixer import ProductFixer
 from .reader import ProductReader
 from .reporter import ReportGenerator
-from .baseline import build_current_record, load_baseline, save_baseline
+from .baseline import (
+    add_history,
+    build_current_record,
+    export_history,
+    load_baseline,
+    load_history,
+    save_baseline,
+)
 from . import __version__
 
 console = Console()
@@ -95,7 +103,7 @@ def check(folder_path: str, store: Optional[str], level: Optional[str], summary:
             console.print("[yellow]未找到商品数据[/yellow]")
             return
 
-        checker = ProductChecker(scan_result.products)
+        checker = ProductChecker(scan_result.products, base_dir=folder_path, config=load_config(folder_path))
         check_results = checker.check_all(store_filter=store)
 
         if not check_results:
@@ -114,7 +122,8 @@ def check(folder_path: str, store: Optional[str], level: Optional[str], summary:
         if critical_count > 0:
             console.print(f"\n[bold red]存在 {critical_count} 个严重问题，建议先修复后再上架[/bold red]")
 
-        save_baseline(folder_path, scan_result, check_results)
+        current = build_current_record(scan_result, check_results)
+        add_history(folder_path, current)
 
     except Exception as e:
         console.print(f"[bold red]检查失败: {e}[/bold red]")
@@ -167,7 +176,7 @@ def fix(folder_path: str, store: Optional[str], preview: bool, output: str, yes:
             console.print("[yellow]未找到商品数据[/yellow]")
             return
 
-        checker = ProductChecker(scan_result.products)
+        checker = ProductChecker(scan_result.products, base_dir=folder_path, config=load_config(folder_path))
         check_results = checker.check_all(store_filter=store)
 
         fixer = ProductFixer(scan_result.products)
@@ -208,8 +217,12 @@ def fix(folder_path: str, store: Optional[str], preview: bool, output: str, yes:
         applied, skipped = fixer.apply_fixes(check_results, preview=False)
         console.print(f"\n[green]已应用 {len(applied)} 项修复[/green]")
 
+        output = os.path.normpath(output)
         if not os.path.isabs(output):
-            output = os.path.join(folder_path, output)
+            has_sep = os.sep in output or "/" in output
+            if not has_sep:
+                output = os.path.join(folder_path, output)
+                output = os.path.normpath(output)
 
         saved_files = fixer.save_fixes(output)
         console.print(f"\n[bold]修复后的数据已保存到:[/bold]")
@@ -248,7 +261,7 @@ def report(folder_path: str, store: Optional[str], level: Optional[str], output_
             console.print("[yellow]未找到商品数据[/yellow]")
             return
 
-        checker = ProductChecker(scan_result.products)
+        checker = ProductChecker(scan_result.products, base_dir=folder_path, config=load_config(folder_path))
         check_results = checker.check_all(store_filter=store)
 
         reporter = ReportGenerator(scan_result, check_results)
@@ -273,7 +286,8 @@ def report(folder_path: str, store: Optional[str], level: Optional[str], output_
         console_report = reporter.generate_console_report(level_filter=level)
         console.print(console_report)
 
-        save_baseline(folder_path, scan_result, check_results)
+        current = build_current_record(scan_result, check_results)
+        add_history(folder_path, current)
 
         if open_file:
             try:
@@ -304,7 +318,7 @@ def diff(folder_path: str, store: Optional[str]) -> None:
             console.print("[yellow]未找到商品数据[/yellow]")
             return
 
-        checker = ProductChecker(scan_result.products)
+        checker = ProductChecker(scan_result.products, base_dir=folder_path, config=load_config(folder_path))
         check_results = checker.check_all(store_filter=store)
 
         current = build_current_record(scan_result, check_results)
@@ -351,10 +365,117 @@ def diff(folder_path: str, store: Optional[str]) -> None:
         else:
             console.print("\n[bold yellow]⚠ 数据有变化：请确认是否修改了商品资料，或检查是否有报告/修复文件被误读[/bold yellow]")
 
-        save_baseline(folder_path, scan_result, check_results)
-
     except Exception as e:
         console.print(f"[bold red]对比失败: {e}[/bold red]")
+        raise click.Abort()
+
+
+@cli.command("save-baseline")
+@click.argument("folder_path", type=click.Path(exists=True, file_okay=False, dir_okay=True))
+def save_baseline_cmd(folder_path: str) -> None:
+    """手动保存当前检查结果为对比基准"""
+    try:
+        reader = ProductReader(folder_path)
+        scan_result = reader.read_products()
+
+        if not scan_result.products:
+            console.print("[yellow]未找到商品数据[/yellow]")
+            return
+
+        checker = ProductChecker(scan_result.products, base_dir=folder_path, config=load_config(folder_path))
+        check_results = checker.check_all()
+
+        record = save_baseline(folder_path, scan_result, check_results)
+        console.print(f"\n[bold green]✓ 基准已保存[/bold green]")
+        console.print(f"保存时间: {record.timestamp}")
+        console.print(f"商品总数: {record.total_products}")
+        console.print(f"问题总数: {record.total_issues}")
+        console.print(f"严重问题: {record.critical_count}")
+
+        current = build_current_record(scan_result, check_results)
+        add_history(folder_path, current)
+
+    except Exception as e:
+        console.print(f"[bold red]保存基准失败: {e}[/bold red]")
+        raise click.Abort()
+
+
+@cli.command()
+@click.argument("folder_path", type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option("--limit", type=int, default=10, help="显示最近的N条记录")
+def history(folder_path: str, limit: int) -> None:
+    """查看最近的检查历史记录"""
+    try:
+        records = load_history(folder_path, limit=limit)
+
+        if not records:
+            console.print("[yellow]没有历史记录，请先运行 check 或 report 命令[/yellow]")
+            return
+
+        console.print(f"\n[bold blue]=== 检查历史（最近 {len(records)} 条） ===[/bold blue]")
+
+        table = Table(title="检查历史", show_lines=True)
+        table.add_column("序号", style="bold", justify="right")
+        table.add_column("时间", style="cyan")
+        table.add_column("商品数", justify="right")
+        table.add_column("通过", justify="right", style="green")
+        table.add_column("问题", justify="right", style="red")
+        table.add_column("严重", justify="right", style="red")
+        table.add_column("警告", justify="right", style="yellow")
+        table.add_column("提示", justify="right", style="blue")
+
+        for idx, record in enumerate(reversed(records)):
+            try:
+                dt = datetime.fromisoformat(record.timestamp)
+                time_str = dt.strftime("%m-%d %H:%M")
+            except Exception:
+                time_str = record.timestamp
+
+            table.add_row(
+                str(len(records) - idx),
+                time_str,
+                str(record.total_products),
+                str(record.passed_count),
+                str(record.failed_count),
+                str(record.critical_count),
+                str(record.warning_count),
+                str(record.info_count),
+            )
+
+        console.print(table)
+
+        baseline = load_baseline(folder_path)
+        if baseline:
+            try:
+                dt = datetime.fromisoformat(baseline.timestamp)
+                baseline_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                baseline_time = baseline.timestamp
+            console.print(f"\n[dim]当前基准时间: {baseline_time}[/dim]")
+        else:
+            console.print(f"\n[dim]尚未设置基准，使用 save-baseline 命令手动设置[/dim]")
+
+    except Exception as e:
+        console.print(f"[bold red]查看历史失败: {e}[/bold red]")
+        raise click.Abort()
+
+
+@cli.command("history-export")
+@click.argument("folder_path", type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option("--output", help="输出文件路径")
+@click.option("--limit", type=int, default=50, help="导出最近的N条记录")
+def history_export_cmd(folder_path: str, output: Optional[str], limit: int) -> None:
+    """导出检查历史记录为 Excel"""
+    try:
+        if not output:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output = os.path.join(folder_path, f"check_history_{timestamp}.xlsx")
+
+        saved_path = export_history(folder_path, output, limit=limit)
+        console.print(f"\n[bold green]✓ 历史记录已导出: {saved_path}[/bold green]")
+
+    except Exception as e:
+        console.print(f"[bold red]导出历史失败: {e}[/bold red]")
         raise click.Abort()
 
 
