@@ -1,0 +1,6 @@
+click
+pandas
+openpyxl
+Pillow
+rich
+PyYAML
