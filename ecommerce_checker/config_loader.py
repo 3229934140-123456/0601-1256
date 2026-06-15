@@ -109,7 +109,7 @@ class CheckerConfig:
 
     def get_config_for_shop(self, shop: Optional[str]) -> Dict[str, Any]:
         if shop and shop in self._shop_configs:
-            return self._shop_configs[shop]
+            return copy.deepcopy(self._shop_configs[shop])
         return copy.deepcopy(self._global_config)
 
     @property
@@ -119,6 +119,25 @@ class CheckerConfig:
     @property
     def configured_shops(self) -> List[str]:
         return list(self._shop_configs.keys())
+
+    @property
+    def config_file_path(self) -> Optional[str]:
+        return self._find_config_file()
+
+    @property
+    def global_config(self) -> Dict[str, Any]:
+        return copy.deepcopy(self._global_config)
+
+    @property
+    def shop_configs(self) -> Dict[str, Dict[str, Any]]:
+        return {k: copy.deepcopy(v) for k, v in self._shop_configs.items()}
+
+    def get_all_shops_with_config(self) -> List[str]:
+        shops = set(self._shop_configs.keys())
+        return sorted(shops)
+
+    def get_effective_config(self, shop: Optional[str]) -> Dict[str, Any]:
+        return self.get_config_for_shop(shop)
 
 
 def load_config(folder_path: str) -> CheckerConfig:

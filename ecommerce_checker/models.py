@@ -72,3 +72,4 @@ class BaselineRecord:
     info_count: int
     passed_count: int
     failed_count: int
+    shop_stats: Dict[str, Dict[str, int]] = field(default_factory=dict)
