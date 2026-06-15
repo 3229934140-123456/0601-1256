@@ -57,3 +57,18 @@ class FixPreview:
     old_value: Any
     new_value: Any
     reason: str
+
+
+@dataclass
+class BaselineRecord:
+    timestamp: str
+    total_files: int
+    total_products: int
+    stores: List[str]
+    categories: List[str]
+    total_issues: int
+    critical_count: int
+    warning_count: int
+    info_count: int
+    passed_count: int
+    failed_count: int

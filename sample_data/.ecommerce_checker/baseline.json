@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-06-15T12:13:33.831892",
+  "total_files": 1,
+  "total_products": 7,
+  "stores": [
+    "专营店",
+    "旗舰店"
+  ],
+  "categories": [
+    "家居用品",
+    "数码配件",
+    "服装",
+    "箱包配饰",
+    "鞋靴"
+  ],
+  "total_issues": 16,
+  "critical_count": 6,
+  "warning_count": 7,
+  "info_count": 3,
+  "passed_count": 2,
+  "failed_count": 5
+}

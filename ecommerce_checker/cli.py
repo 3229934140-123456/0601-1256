@@ -13,6 +13,7 @@ from .config import ERROR_LEVELS
 from .fixer import ProductFixer
 from .reader import ProductReader
 from .reporter import ReportGenerator
+from .baseline import build_current_record, load_baseline, save_baseline
 from . import __version__
 
 console = Console()
@@ -112,6 +113,8 @@ def check(folder_path: str, store: Optional[str], level: Optional[str], summary:
         critical_count = sum(1 for r in check_results for i in r.issues if i.level == "critical")
         if critical_count > 0:
             console.print(f"\n[bold red]存在 {critical_count} 个严重问题，建议先修复后再上架[/bold red]")
+
+        save_baseline(folder_path, scan_result, check_results)
 
     except Exception as e:
         console.print(f"[bold red]检查失败: {e}[/bold red]")
@@ -270,6 +273,8 @@ def report(folder_path: str, store: Optional[str], level: Optional[str], output_
         console_report = reporter.generate_console_report(level_filter=level)
         console.print(console_report)
 
+        save_baseline(folder_path, scan_result, check_results)
+
         if open_file:
             try:
                 os.startfile(saved_path)
@@ -278,6 +283,78 @@ def report(folder_path: str, store: Optional[str], level: Optional[str], output_
 
     except Exception as e:
         console.print(f"[bold red]报告生成失败: {e}[/bold red]")
+        raise click.Abort()
+
+
+@cli.command()
+@click.argument("folder_path", type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option("--store", help="按店铺过滤")
+def diff(folder_path: str, store: Optional[str]) -> None:
+    """与上次检查记录对比，查看商品数和问题数变化"""
+    try:
+        prev = load_baseline(folder_path)
+        if prev is None:
+            console.print("[yellow]未找到上次检查记录，请先运行 check 或 report 命令[/yellow]")
+            return
+
+        reader = ProductReader(folder_path)
+        scan_result = reader.read_products()
+
+        if not scan_result.products:
+            console.print("[yellow]未找到商品数据[/yellow]")
+            return
+
+        checker = ProductChecker(scan_result.products)
+        check_results = checker.check_all(store_filter=store)
+
+        current = build_current_record(scan_result, check_results)
+
+        console.print(f"\n[bold blue]=== 对比结果 ===[/bold blue]")
+        console.print(f"上次记录时间: [dim]{prev.timestamp}[/dim]")
+        console.print(f"本次检查时间: [dim]{current.timestamp}[/dim]")
+        console.print("")
+
+        table = Table(title="数量对比", show_lines=True)
+        table.add_column("指标", style="bold")
+        table.add_column("上次", style="cyan", justify="right")
+        table.add_column("本次", style="green", justify="right")
+        table.add_column("变化", justify="center")
+
+        def _fmt_delta(cur: int, old: int) -> str:
+            d = cur - old
+            if d > 0:
+                return f"[red]+{d}[/red]"
+            elif d < 0:
+                return f"[green]{d}[/green]"
+            return "[dim]0[/dim]"
+
+        table.add_row("商品文件数", str(prev.total_files), str(current.total_files), _fmt_delta(current.total_files, prev.total_files))
+        table.add_row("商品总数", str(prev.total_products), str(current.total_products), _fmt_delta(current.total_products, prev.total_products))
+        table.add_row("通过检查", str(prev.passed_count), str(current.passed_count), _fmt_delta(current.passed_count, prev.passed_count))
+        table.add_row("存在问题", str(prev.failed_count), str(current.failed_count), _fmt_delta(current.failed_count, prev.failed_count))
+        table.add_row("问题总数", str(prev.total_issues), str(current.total_issues), _fmt_delta(current.total_issues, prev.total_issues))
+        table.add_row("严重问题", str(prev.critical_count), str(current.critical_count), _fmt_delta(current.critical_count, prev.critical_count))
+        table.add_row("警告问题", str(prev.warning_count), str(current.warning_count), _fmt_delta(current.warning_count, prev.warning_count))
+        table.add_row("提示问题", str(prev.info_count), str(current.info_count), _fmt_delta(current.info_count, prev.info_count))
+
+        console.print(table)
+
+        stable = (
+            current.total_files == prev.total_files
+            and current.total_products == prev.total_products
+            and current.total_issues == prev.total_issues
+            and current.critical_count == prev.critical_count
+        )
+
+        if stable:
+            console.print("\n[bold green]✓ 数据稳定：商品数、问题数、严重问题数与上次一致，无报告文件混入[/bold green]")
+        else:
+            console.print("\n[bold yellow]⚠ 数据有变化：请确认是否修改了商品资料，或检查是否有报告/修复文件被误读[/bold yellow]")
+
+        save_baseline(folder_path, scan_result, check_results)
+
+    except Exception as e:
+        console.print(f"[bold red]对比失败: {e}[/bold red]")
         raise click.Abort()
 
 

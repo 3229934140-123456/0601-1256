@@ -24,6 +24,7 @@ class ProductReader:
         "check_report_data",
         "__pycache__",
         ".git",
+        ".ecommerce_checker",
     ]
 
     COLUMN_MAPPINGS = {
@@ -62,7 +63,7 @@ class ProductReader:
             pattern = os.path.join(self.folder_path, "**", f"*{ext}")
             all_files = glob.glob(pattern, recursive=True)
             for f in all_files:
-                if not self._is_excluded_file(f) and not self._is_in_excluded_dir(f):
+                if not self._is_excluded_file(f) and not self._is_in_excluded_dir(f) and not self._is_tool_generated(f):
                     files.append(f)
         return sorted(files)
 
@@ -110,7 +111,21 @@ class ProductReader:
         detail_images.sort()
         return main_image, detail_images
 
+    def _is_tool_generated(self, file_path: str) -> bool:
+        if file_path.endswith(".csv"):
+            return False
+        try:
+            xl = pd.ExcelFile(file_path)
+            if "__ecommerce_checker__" in xl.sheet_names:
+                return True
+        except Exception:
+            pass
+        return False
+
     def _read_file(self, file_path: str) -> List[Product]:
+        if self._is_tool_generated(file_path):
+            return []
+
         products = []
         try:
             if file_path.endswith(".csv"):
@@ -184,13 +199,17 @@ class ProductReader:
                         if not table_detail_images and detail_str:
                             table_detail_images = [detail_str]
 
-                if table_main_image or table_detail_images:
+                dir_main_image, dir_detail_images = self._find_images_for_sku(sku, base_dir)
+
+                if table_main_image:
                     product.main_image = table_main_image
+                elif dir_main_image:
+                    product.main_image = dir_main_image
+
+                if table_detail_images:
                     product.detail_images = table_detail_images
-                else:
-                    main_image, detail_images = self._find_images_for_sku(sku, base_dir)
-                    product.main_image = main_image
-                    product.detail_images = detail_images
+                elif dir_detail_images:
+                    product.detail_images = dir_detail_images
 
                 products.append(product)
 

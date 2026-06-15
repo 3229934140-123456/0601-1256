@@ -7,6 +7,8 @@ import pandas as pd
 
 from .models import CheckResult, FixPreview, Product
 
+TOOL_MARKER_SHEET = "__ecommerce_checker__"
+
 
 class ProductFixer:
     def __init__(self, products: List[Product]):
@@ -81,7 +83,10 @@ class ProductFixer:
                 })
 
             df = pd.DataFrame(data)
-            df.to_excel(output_file, index=False)
+            with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
+                df.to_excel(writer, index=False, sheet_name="修复后数据")
+                marker_df = pd.DataFrame({"marker": ["ecommerce_checker_tool_generated"]})
+                marker_df.to_excel(writer, index=False, sheet_name=TOOL_MARKER_SHEET)
             saved_files.append(output_file)
 
         return saved_files

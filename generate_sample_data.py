@@ -27,11 +27,12 @@ def create_sample_data():
          "https://cdn.example.com/images/PROD002_detail_1.jpg;https://cdn.example.com/images/PROD002_detail_2.jpg"],
         ["PROD003", "高仿奢侈品包包 原单复刻爆款", 999.00, 20, "箱包配饰", "旗舰店", "", ""],
         ["PROD004", "", 50.00, 0, "服装", "专营店", "", ""],
-        ["PROD005", "纯棉T恤 夏季新款短袖", -10.00, -5, "", "旗舰店",
-         "", ""],
+        ["PROD005", "纯棉T恤 夏季新款短袖", -10.00, -5, "", "旗舰店", "", ""],
         ["PROD006", "运动鞋 轻便透气跑步鞋", 299.00, -100, "鞋靴", "旗舰店",
          "images/PROD001_main.jpg",
          "images/PROD001_detail_1.jpg"],
+        ["PROD007", "纯棉衬衫 商务休闲长袖", 159.00, 30, "服装", "旗舰店",
+         "https://cdn.example.com/images/PROD007.jpg", ""],
     ]
 
     for row in data:
@@ -67,6 +68,9 @@ def create_sample_data():
         ("PROD001_detail_3.jpg", (52, 168, 83), "PROD001 详情3"),
         ("PROD002.jpg", (156, 39, 176), "PROD002 主图"),
         ("PROD002_detail_1.jpg", (0, 188, 212), "PROD002 详情1"),
+        ("PROD007_detail_1.jpg", (255, 87, 34), "PROD007 详情1"),
+        ("PROD007_detail_2.jpg", (63, 81, 181), "PROD007 详情2"),
+        ("PROD007_detail_3.jpg", (0, 150, 136), "PROD007 详情3"),
     ]
 
     for filename, color, text in images_to_create:

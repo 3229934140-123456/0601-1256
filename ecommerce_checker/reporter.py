@@ -10,6 +10,8 @@ import pandas as pd
 from .config import ERROR_LEVELS
 from .models import CheckResult, FixPreview, ScanResult
 
+TOOL_MARKER_SHEET = "__ecommerce_checker__"
+
 
 class ReportGenerator:
     def __init__(self, scan_result: ScanResult, check_results: List[CheckResult]):
@@ -121,7 +123,10 @@ class ReportGenerator:
                 })
 
         df = pd.DataFrame(data)
-        df.to_excel(output_path, index=False)
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="检查报告")
+            marker_df = pd.DataFrame({"marker": ["ecommerce_checker_tool_generated"]})
+            marker_df.to_excel(writer, index=False, sheet_name=TOOL_MARKER_SHEET)
         return output_path
 
     def export_json(self, output_path: str, level_filter: Optional[str] = None) -> str:
@@ -189,7 +194,10 @@ class ReportGenerator:
             })
 
         df = pd.DataFrame(data)
-        df.to_excel(output_path, index=False)
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="待修改清单")
+            marker_df = pd.DataFrame({"marker": ["ecommerce_checker_tool_generated"]})
+            marker_df.to_excel(writer, index=False, sheet_name=TOOL_MARKER_SHEET)
         return output_path
 
     def export_fix_preview(self, previews: List[FixPreview], output_path: str) -> str:
@@ -206,5 +214,8 @@ class ReportGenerator:
             })
 
         df = pd.DataFrame(data)
-        df.to_excel(output_path, index=False)
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="修复预览")
+            marker_df = pd.DataFrame({"marker": ["ecommerce_checker_tool_generated"]})
+            marker_df.to_excel(writer, index=False, sheet_name=TOOL_MARKER_SHEET)
         return output_path
