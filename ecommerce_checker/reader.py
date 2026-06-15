@@ -12,6 +12,20 @@ from .utils import clean_text, parse_price, parse_stock
 class ProductReader:
     SUPPORTED_EXTENSIONS = (".xlsx", ".xls", ".csv")
 
+    EXCLUDED_FILENAMES = [
+        "fix_list",
+        "fix_preview",
+        "check_report",
+        "_fixed",
+    ]
+
+    EXCLUDED_DIRNAMES = [
+        "fixed_data",
+        "check_report_data",
+        "__pycache__",
+        ".git",
+    ]
+
     COLUMN_MAPPINGS = {
         "sku": ["sku", "商品编码", "商品编号", "货号", "编码", "product_id", "productid"],
         "title": ["title", "标题", "商品名称", "商品标题", "名称", "product_name", "productname", "name"],
@@ -27,11 +41,29 @@ class ProductReader:
         self.folder_path = folder_path
         self._products: List[Product] = []
 
+    def _is_excluded_file(self, filename: str) -> bool:
+        basename = os.path.basename(filename).lower()
+        for keyword in self.EXCLUDED_FILENAMES:
+            if keyword in basename:
+                return True
+        return False
+
+    def _is_in_excluded_dir(self, filepath: str) -> bool:
+        rel_path = os.path.relpath(filepath, self.folder_path)
+        path_parts = rel_path.split(os.sep)
+        for part in path_parts:
+            if part.lower() in [d.lower() for d in self.EXCLUDED_DIRNAMES]:
+                return True
+        return False
+
     def scan_files(self) -> List[str]:
         files = []
         for ext in self.SUPPORTED_EXTENSIONS:
             pattern = os.path.join(self.folder_path, "**", f"*{ext}")
-            files.extend(glob.glob(pattern, recursive=True))
+            all_files = glob.glob(pattern, recursive=True)
+            for f in all_files:
+                if not self._is_excluded_file(f) and not self._is_in_excluded_dir(f):
+                    files.append(f)
         return sorted(files)
 
     def _map_columns(self, df: pd.DataFrame) -> Dict[str, str]:
@@ -133,9 +165,32 @@ class ProductReader:
                     if not pd.isna(shop_val):
                         product.shop = clean_text(str(shop_val))
 
-                main_image, detail_images = self._find_images_for_sku(sku, base_dir)
-                product.main_image = main_image
-                product.detail_images = detail_images
+                table_main_image = None
+                table_detail_images: List[str] = []
+
+                if "main_image" in col_map:
+                    main_img_val = row.get(col_map["main_image"], "")
+                    if not pd.isna(main_img_val) and str(main_img_val).strip():
+                        table_main_image = str(main_img_val).strip()
+
+                if "detail_image" in col_map:
+                    detail_img_val = row.get(col_map["detail_image"], "")
+                    if not pd.isna(detail_img_val) and str(detail_img_val).strip():
+                        detail_str = str(detail_img_val).strip()
+                        for separator in [";", ",", "\n", "|"]:
+                            if separator in detail_str:
+                                table_detail_images = [p.strip() for p in detail_str.split(separator) if p.strip()]
+                                break
+                        if not table_detail_images and detail_str:
+                            table_detail_images = [detail_str]
+
+                if table_main_image or table_detail_images:
+                    product.main_image = table_main_image
+                    product.detail_images = table_detail_images
+                else:
+                    main_image, detail_images = self._find_images_for_sku(sku, base_dir)
+                    product.main_image = main_image
+                    product.detail_images = detail_images
 
                 products.append(product)
 

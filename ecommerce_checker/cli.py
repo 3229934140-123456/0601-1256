@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from typing import Optional
 
 import click
@@ -250,7 +251,7 @@ def report(folder_path: str, store: Optional[str], level: Optional[str], output_
         reporter = ReportGenerator(scan_result, check_results)
 
         if not output:
-            timestamp = scan_result.products[0].source_file.split("_")[-1].split(".")[0] if scan_result.products else "report"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             ext = "xlsx" if output_format == "excel" else "json"
             output = os.path.join(folder_path, f"check_report_{timestamp}.{ext}")
 
